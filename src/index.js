@@ -1,23 +1,22 @@
 /**
- * Aliyun CDT Tracker & ECS Control Worker
- * 
- * Required Environment Variables:
- * - ACCESS_KEY_ID: Aliyun Access Key ID
- * - ACCESS_KEY_SECRET: Aliyun Access Key Secret
- * - REGION_ID: ECS Region ID (e.g., cn-hongkong)
- * - ECS_INSTANCE_ID: ECS Instance ID
- * - TRAFFIC_THRESHOLD_GB: Traffic threshold in GB (default: 180)
+ * 阿里云 CDT 流量监控 & ECS 控制脚本 (Cloudflare Worker)
+ * * 必须配置的环境变量:
+ * - ACCESS_KEY_ID: 阿里云 Access Key ID
+ * - ACCESS_KEY_SECRET: 阿里云 Access Key Secret
+ * - REGION_ID: ECS 所在地域 ID (例如: cn-hongkong)
+ * - ECS_INSTANCE_ID: ECS 实例 ID
+ * - TRAFFIC_THRESHOLD_GB: 流量阈值 GB (默认: 180)
  */
 
 export default {
   async scheduled(event, env, ctx) {
-    console.log("Cron Triggered");
+    console.log("定时任务已触发");
     await handleSchedule(env);
   },
 
   async fetch(request, env, ctx) {
     await handleSchedule(env);
-    return new Response("Executed successfully", { status: 200 });
+    return new Response("执行成功", { status: 200 });
   }
 };
 
@@ -30,46 +29,46 @@ async function handleSchedule(env) {
   } = env;
 
   if (!ACCESS_KEY_ID || !ACCESS_KEY_SECRET || !REGION_ID || !ECS_INSTANCE_ID) {
-    console.error("Missing required environment variables.");
+    console.error("缺少必要的环境变量配置。");
     return;
   }
 
   try {
     const trafficInfo = await getInstanceUsedTrafficGB(env, ECS_INSTANCE_ID);
     if (trafficInfo.isMatched) {
-      console.log(`CDT Used Traffic for ECS ${ECS_INSTANCE_ID}: ${trafficInfo.trafficGB.toFixed(2)} GB`);
+      console.log(`实例 ${ECS_INSTANCE_ID} 的 CDT 已用流量: ${trafficInfo.trafficGB.toFixed(2)} GB`);
     } else {
-      console.log(`CDT Used Traffic (fallback total) for ECS ${ECS_INSTANCE_ID}: ${trafficInfo.trafficGB.toFixed(2)} GB`);
+      console.log(`未匹配到特定实例，实例 ${ECS_INSTANCE_ID} 的备选总流量: ${trafficInfo.trafficGB.toFixed(2)} GB`);
     }
 
     const instanceStatus = await getEcsStatus(env, ECS_INSTANCE_ID);
-    console.log(`ECS Instance ${ECS_INSTANCE_ID} Status: ${instanceStatus}`);
+    console.log(`ECS 实例 ${ECS_INSTANCE_ID} 当前状态: ${instanceStatus}`);
 
     if (instanceStatus === "Running" || instanceStatus === "Starting") {
-      console.log("Instance already running.");
+      console.log("实例已在运行中或正在启动。");
       return;
     }
 
     if (instanceStatus === "Stopped") {
-      console.log("Instance stopped. Starting...");
+      console.log("实例处于停止状态。正在尝试启动...");
       await startEcsInstance(env, ECS_INSTANCE_ID);
       return;
     }
 
     if (instanceStatus === "Stopping") {
-      console.log("Instance stopping. Waiting...");
+      console.log("实例正在停止中。等待中...");
       return;
     }
 
-    console.log(`Instance abnormal state (${instanceStatus}). Rebooting...`);
+    console.log(`实例状态异常 (${instanceStatus})。正在尝试强制重启...`);
     await rebootEcsInstance(env, ECS_INSTANCE_ID);
 
   } catch (error) {
-    console.error("Error in execution:", error);
+    console.error("执行过程中发生错误:", error);
   }
 }
 
-// ================== ECS API ==================
+// ================== 阿里云 ECS API 接口 ==================
 
 async function getInstanceUsedTrafficGB(env, instanceId) {
   const params = {
@@ -133,7 +132,7 @@ async function getEcsStatus(env, instanceId) {
   const instances = result.Instances?.Instance || [];
 
   if (instances.length === 0) {
-    throw new Error("Instance not found");
+    throw new Error("未找到指定的 ECS 实例");
   }
 
   return instances[0].Status;
@@ -162,7 +161,7 @@ async function rebootEcsInstance(env, instanceId) {
   return await requestAliyun(env, `ecs.${env.REGION_ID}.aliyuncs.com`, params);
 }
 
-// ================== Core Request Logic ==================
+// ================== 核心请求与签名逻辑 ==================
 
 async function requestAliyun(env, domain, params) {
   const method = 'POST';
@@ -193,7 +192,7 @@ async function requestAliyun(env, domain, params) {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Aliyun API Error: ${response.status} ${response.statusText} - ${text}`);
+    throw new Error(`阿里云 API 响应错误: ${response.status} ${response.statusText} - ${text}`);
   }
 
   return await response.json();
